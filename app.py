@@ -25,7 +25,7 @@ MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
 TOPIC_SENSOR = "sic/dibimbing/492/alexander/day7/sensor"
 TOPIC_OUTPUT = "sic/dibimbing/492/alexander/day7/output"
-MODEL_PATH = "iot_temp_model.pkl"   # put the .pkl in same repo
+MODEL_PATH = "model/random_forest_model.pkl"   # put the .pkl in same repo
 
 # timezone GMT+7 helper
 TZ = timezone(timedelta(hours=7))
@@ -142,13 +142,29 @@ start_mqtt_thread_once()
 # ---------------------------
 # Helper Functions
 # ---------------------------
-def model_predict_label_and_conf(temp, hum):
+def parse_time(timestr):
+    try:
+        t = datetime.strptime(timestr, "%H:%M:%S")
+        return t.hour, t.minute, t.second
+    except:
+        return 0, 0, 0
+
+label_mapping = {
+    0: "Hemat",
+    1: "Normal",
+    2: "Boros"
+}
+
+def model_predict_label_and_conf(time_str, lumen):
     model = st.session_state.ml_model
     if model is None:
         return ("N/A", None)
-    X = [[float(temp), float(hum)]]
+    hour, minute, second = parse_time(time_str)
+    X = [[float(lumen), hour, minute, second]]
+
     try:
-        label = model.predict(X)[0]
+        pred_encoded = model.predict(X)[0]
+        label = label_mapping.get(pred_encoded, "ERR")
     except Exception:
         label = "ERR"
     prob = None
@@ -159,12 +175,6 @@ def model_predict_label_and_conf(temp, hum):
             prob = None
     return (label, prob)
 
-def parse_time(timestr):
-    try:
-        t = datetime.strptime(timestr, "%H:%M:%S")
-        return t.hour, t.minute, t.second
-    except:
-        return None, None, None
 
 # ---------------------------
 # Dummy Functions (for dummy values and dummy prediction)
@@ -245,18 +255,18 @@ def process_queue():
             }
 
             # ML prediction
-            # if temp is not None and hum is not None:
-            #     label, conf = model_predict_label_and_conf(temp, hum)
-            # else:
-            #     label, conf = ("N/A", None)
+            if p_lumen is not None and p_time is not None:
+                label, conf = model_predict_label_and_conf(p_time, p_lumen)
+            else:
+                label, conf = ("N/A", None)
 
-            # row["pred"] = label
-            # row["conf"] = conf
-
-            # Dummy ML Predict
-            label, conf = dummy_predict(p_time, p_lumen)
             row["pred"] = label
             row["conf"] = conf
+
+            # # Dummy ML Predict
+            # label, conf = dummy_predict(p_time, p_lumen)
+            # row["pred"] = label
+            # row["conf"] = conf
 
             # simple anomaly: low confidence or z-score on latest window
             anomaly = False
@@ -264,17 +274,6 @@ def process_queue():
                 anomaly = True
 
             # z-score on temp using recent window
-            # temps = [r["temp"] for r in st.session_state.logs if r.get("temp") is not None]
-            # window = temps[-30:] if len(temps) > 0 else []
-            # if len(window) >= 5 and temp is not None:
-            #     mean = float(np.mean(window))
-            #     std = float(np.std(window, ddof=0))
-            #     if std > 0:
-            #         z = abs((temp - mean) / std)
-            #         if z >= 3.0:
-            #             anomaly = True
-
-            # dummy z-score
             lumens = [r["lumen"] for r in st.session_state.logs if r.get("lumen") is not None]
             window = lumens[-30:] if len(lumens) > 0 else []
             if len(window) >= 5 and p_lumen is not None:
@@ -316,7 +315,7 @@ _ = process_queue()
 # ---------------------------
 # optionally auto refresh UI; requires streamlit-autorefresh in requirements
 if HAS_AUTOREFRESH:
-    st_autorefresh(interval=5000, limit=None, key="autorefresh")  # 2s refresh
+    st_autorefresh(interval=5000, limit=None, key="autorefresh")  # 5s refresh
 
 left, right = st.columns([1, 2])
 
@@ -355,7 +354,7 @@ with left:
             st.success("Published NORMAL")
         except Exception as e:
             st.error(f"Publish failed: {e}")
-    if col2.button("Send HEMAT"):
+    if col3.button("Send HEMAT"):
         try:
             pubc.publish(TOPIC_OUTPUT, "HEMAT", retain=True)
             st.success("Published HEMAT")
@@ -378,10 +377,8 @@ with right:
     if (not df_plot.empty) and {"time", "lumen"}.issubset(df_plot.columns):
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df_plot["time"], y=df_plot["lumen"], mode="lines+markers", name="Lumen (lm)"))
-        # fig.add_trace(go.Scatter(x=df_plot["ts"], y=df_plot["hum"], mode="lines+markers", name="Hum (%)", yaxis="y2"))
         fig.update_layout(
             yaxis=dict(title="Lumen (lm)"),
-            # yaxis2=dict(title="Humidity (%)", overlaying="y", side="right", showgrid=False),
             height=520
         )
         # color markers by anomaly / label
@@ -409,6 +406,7 @@ with right:
         st.dataframe(pd.DataFrame(st.session_state.logs)[::-1].head(100))
     else:
         st.write("—")
+
 
 # after UI render, drain queue (so next rerun shows fresh data)
 process_queue()
