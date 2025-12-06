@@ -1,0 +1,7 @@
+joblib==1.5.2
+numpy==2.3.5
+paho_mqtt==2.1.0
+pandas==2.3.3
+plotly==6.5.0
+streamlit==1.52.1
+streamlit_autorefresh==1.0.1

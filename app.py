@@ -63,6 +63,11 @@ if "mqtt_thread_started" not in st.session_state:
 if "ml_model" not in st.session_state:
     st.session_state.ml_model = None
 
+if "mqtt_pubc" not in st.session_state:
+    st.session_state.mqtt_pubc = mqtt.Client()
+    st.session_state.mqtt_pubc.connect(MQTT_BROKER, MQTT_PORT, 60)
+    st.session_state.mqtt_pubc.loop_start()
+
 # ---------------------------
 # Load Model (safe)
 # ---------------------------
@@ -289,17 +294,16 @@ def process_queue():
             updated = True
 
             # Auto-publish alert back to ESP32 (fire-and-forget client)
+            pubc = st.session_state.mqtt_pubc
             try:
                 if label == "Boros":
-                    pubc = mqtt.Client()
-                    pubc.connect(MQTT_BROKER, MQTT_PORT, 60)
-                    pubc.publish(TOPIC_OUTPUT, "ALERT_ON")
-                    pubc.disconnect()   
+                    pubc.publish(TOPIC_OUTPUT, "BOROS", retain=True) 
+                elif label == "Hemat":
+                    pubc.publish(TOPIC_OUTPUT, "HEMAT", retain=True)
+                elif label == "Normal":
+                    pubc.publish(TOPIC_OUTPUT, "NORMAL", retain=True)
                 else:
-                    pubc = mqtt.Client()
-                    pubc.connect(MQTT_BROKER, MQTT_PORT, 60)
-                    pubc.publish(TOPIC_OUTPUT, "ALERT_OFF")
-                    pubc.disconnect()
+                    pubc.publish(TOPIC_OUTPUT, "ANOMALY", retain=True)
             except Exception:
                 pass
     return updated
@@ -312,7 +316,7 @@ _ = process_queue()
 # ---------------------------
 # optionally auto refresh UI; requires streamlit-autorefresh in requirements
 if HAS_AUTOREFRESH:
-    st_autorefresh(interval=3000, limit=None, key="autorefresh")  # 2s refresh
+    st_autorefresh(interval=5000, limit=None, key="autorefresh")  # 2s refresh
 
 left, right = st.columns([1, 2])
 
@@ -327,11 +331,8 @@ with left:
     st.header("Last Reading")
     if st.session_state.last:
         last = st.session_state.last
-        # st.write(f"Time: {last.get('ts')}")
         st.write(f"P_Time: {last.get('time')}")
         st.write(f"Lumen: {last.get('lumen')}")
-        # st.write(f"Temp: {last.get('temp')} °C")
-        # st.write(f"Hum : {last.get('hum')} %")
         st.write(f"Prediction: {last.get('pred')}")
         st.write(f"Confidence: {last.get('conf')}")
         st.write(f"Anomaly flag: {last.get('anomaly')}")
@@ -340,23 +341,24 @@ with left:
 
     st.markdown("---")
     st.header("Manual Output Control")
-    col1, col2 = st.columns(2)
-    if col1.button("Send ALERT_ON"):
+    col1, col2, col3 = st.columns(3)
+    pubc = st.session_state.mqtt_pubc
+    if col1.button("Send BOROS"):
         try:
-            pubc = mqtt.Client()
-            pubc.connect(MQTT_BROKER, MQTT_PORT, 60)
-            pubc.publish(TOPIC_OUTPUT, "ALERT_ON")
-            pubc.disconnect()
-            st.success("Published ALERT_ON")
+            pubc.publish(TOPIC_OUTPUT, "BOROS", retain=True)
+            st.success("Published BOROS")
         except Exception as e:
             st.error(f"Publish failed: {e}")
-    if col2.button("Send ALERT_OFF"):
+    if col2.button("Send NORMAL"):
         try:
-            pubc = mqtt.Client()
-            pubc.connect(MQTT_BROKER, MQTT_PORT, 60)
-            pubc.publish(TOPIC_OUTPUT, "ALERT_OFF")
-            pubc.disconnect()
-            st.success("Published ALERT_OFF")
+            pubc.publish(TOPIC_OUTPUT, "NORMAL", retain=True)
+            st.success("Published NORMAL")
+        except Exception as e:
+            st.error(f"Publish failed: {e}")
+    if col2.button("Send HEMAT"):
+        try:
+            pubc.publish(TOPIC_OUTPUT, "HEMAT", retain=True)
+            st.success("Published HEMAT")
         except Exception as e:
             st.error(f"Publish failed: {e}")
 
