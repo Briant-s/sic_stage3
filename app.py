@@ -270,8 +270,6 @@ def process_queue():
 
             # simple anomaly: low confidence or z-score on latest window
             anomaly = False
-            if conf is not None and conf < 0.6:
-                anomaly = True
 
             # z-score on temp using recent window
             lumens = [r["lumen"] for r in st.session_state.logs if r.get("lumen") is not None]
