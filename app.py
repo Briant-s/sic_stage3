@@ -223,7 +223,6 @@ def process_queue():
             updated = True
         elif ttype == "sensor":
             d = item.get("data", {})
-            # st.write("What is d: ", d)
             try:
                 p_time = d.get("time")
             except Exception:
@@ -232,16 +231,6 @@ def process_queue():
                 p_lumen = float(d.get("lumen"))
             except Exception:
                 p_lumen = None
-
-
-            try:
-                temp = float(d.get("temp"))
-            except Exception:
-                temp = None
-            try:
-                hum = float(d.get("hum"))
-            except Exception:
-                hum = None
 
             hour, minute, second = parse_time(p_time)
 
@@ -263,15 +252,10 @@ def process_queue():
             row["pred"] = label
             row["conf"] = conf
 
-            # # Dummy ML Predict
-            # label, conf = dummy_predict(p_time, p_lumen)
-            # row["pred"] = label
-            # row["conf"] = conf
-
             # simple anomaly: low confidence or z-score on latest window
-            anomaly = False
 
             # z-score on temp using recent window
+            anomaly = False
             lumens = [r["lumen"] for r in st.session_state.logs if r.get("lumen") is not None]
             window = lumens[-30:] if len(lumens) > 0 else []
             if len(window) >= 5 and p_lumen is not None:

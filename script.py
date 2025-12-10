@@ -42,7 +42,7 @@ curr_lumen = random.randint(1000,3000)
 
 def generateLumen():
     global curr_lumen
-    change = random.randint(-500, 500)
+    change = random.randint(-100, 100)
     curr_lumen += change
     lumen = max(0, min(4500, curr_lumen))
     return lumen
