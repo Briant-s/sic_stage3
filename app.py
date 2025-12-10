@@ -297,7 +297,7 @@ _ = process_queue()
 # ---------------------------
 # optionally auto refresh UI; requires streamlit-autorefresh in requirements
 if HAS_AUTOREFRESH:
-    st_autorefresh(interval=5000, limit=None, key="autorefresh")  # 5s refresh
+    st_autorefresh(interval=1000, limit=None, key="autorefresh")  # 1s refresh
 
 left, right = st.columns([1, 2])
 
